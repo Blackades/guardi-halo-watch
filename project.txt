@@ -1,0 +1,840 @@
+ABSTRACT 
+Hospitals continue to face increasing challenges in maintaining patient safety and 
+ensuring efficient supervision within wards. Traditional monitoring methods rely heavily 
+on manual oversight by clinical staff, making it difficult to detect high-risk interactions, 
+prevent unauthorized movement, monitor contagious patients, or respond quickly to 
+emergencies. Incidents reported in major hospitals, such as patients harming one 
+another, absconding without settlement of bills, or accessing restricted areas, highlight 
+the urgent need for a more automated and reliable monitoring solution. 
+This project focuses on the General Medical Ward at Aga Khan University Hospital as a 
+model environment. This ward presents real-world conditions such as patients with 
+contagious diseases, patients with unpredictable or violent behavior, and individuals 
+who may wander or leave without authorization. The proposed system utilizes wearable 
+sensor-based wristbands that transmit patient identity and movement data in real time. 
+These wristbands alert the staff to possible removal attempts if tampered with. 
+Receiver nodes installed at strategic locations corridors, entry/exit points, and 
+restricted zones detect patient movements and transmit the information to a 
+centralized database. Medical staff will access a dashboard or mobile application to 
+view patient locations, movement history, alerts, and zone violations. This system aims 
+to enhance operational safety, reduce the workload on health workers, improve 
+emergency response time, and provide a centralized record of patient movement for 
+auditing and analysis. 
+1. Objective 
+1.1 Main Objective 
+To design and develop an automated patient tracking and safety monitoring system for 
+hospital wards using wearable tags and a centralized monitoring platform. 
+1.2 Specific Objectives 
+a) To develop a wearable patient wristband equipped with a sensor for transmitting 
+identity and movement data. 
+b) To install and configure receiver nodes for tracking patient movement across different 
+hospital ward zones. 
+c) To design a secure backend database for logging movements, alerts, and patient 
+zone-history. 
+d) To develop a user interface (dashboard/mobile view) for healthcare workers to 
+monitor patient location in real time. 
+e) To implement automated alerts for restricted-area access, removal of wristbands, 
+risky interactions, and unauthorized exits. 
+EEE2501 
+f) To evaluate the system using a scaled-down model of the Aga Khan University 
+Hospital General Medical Ward. 
+2. Scope of Work 
+• Designing the ward layout model (rooms, restricted areas, corridor, entry/exit 
+points). 
+• Developing the patient wristband prototype with sensor integration. 
+• Setting up receiver nodes and communication network for real-time tracking. 
+• Implementing the backend database and alert logic. 
+• Creating the monitoring dashboard interface. 
+• Testing system performance and validating movement-logging data. 
+• Preparing system documentation and final presentation. 
+3. Learning Areas 
+a) Wireless communication technologies such as RFID, BLE, or UWB. 
+b) Real-time tracking and localization methods in indoor environments. 
+c) Database design and implementation for live logging systems. 
+d) User interface and dashboard development for monitoring applications. 
+e) Safety protocols and movement-control strategies in hospital wards. 
+f) System integration and testing in a model environment. 
+4. Benefits of the Project if Successful 
+a) Enhances patient safety by reducing incidents of violence, unauthorized movement, 
+and absconding. 
+b) Improves monitoring of contagious patients and minimizes exposure risks. 
+c) Provides healthcare staff with real-time visibility, reducing manual supervision 
+workload. 
+d) Strengthens emergency response by tracking patient location instantly. 
+e) Offers long-term records for auditing, research, and administrative decision-making. 
+f) Serves as a scalable model that can be replicated across different hospital wards or 
+facilities. 
+5. Methodology 
+• Conducting a study of movement zones within the General Medical Ward (entry, exit, 
+rooms, corridors, restricted areas). 
+• Designing a scaled-down physical model of the ward layout. 
+EEE2501 
+• Developing wearable wristbands with embedded RFID/BLE tags and tamper 
+detection. 
+• Setting up receiver nodes at key points to detect patient movement. 
+• Implementing communication between nodes and a central server/database. 
+• Developing a dashboard or mobile interface for real-time monitoring. 
+• Simulating patient activities within the model to test detection accuracy and event 
+logging. 
+• Evaluating system performance, alert reliability, and data accuracy. 
+• Documenting results and providing recommendations for full-scale deployment.
+
+
+More details;
+
+
+## TABLE OF CONTENTS
+1. System Overview
+2. Hardware Specifications
+3. Software Architecture
+4. Communication Protocol
+5. Database Design
+6. Dashboard & User Interface
+7. Alert System Logic
+8. Power Management
+
+
+---
+
+## 1. SYSTEM OVERVIEW
+
+### 1.1 System Purpose
+An automated IoT-based patient tracking system that monitors patient location, movement, vital signs, and safety status in real-time within hospital wards.
+
+### 1.2 System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    WEARABLE WRISTBAND                       │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ ESP32 + RFID Tag + MPU6050 + MAX30102 + DHT11       │  │
+│  │ + Conductive Strap + Skin Contact Sensor            │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ RFID (125kHz)
+                      │ WiFi (for firmware updates)
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    RECEIVER NODES                           │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ ESP32 + RFID Reader (RDM6300)                  │  │
+│  │ + LED Indicator + Buzzer                             │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ WiFi (HTTPS/REST API)
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BACKEND SERVER                           │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ python fast api + SQLite Database                     │  │
+│  │ REST API + WebSocket Server                          │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ HTTPS + WebSocket
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              MONITORING DASHBOARD                           │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Web Application (React/vite)                       │  │
+│  │ Real-time Patient Map + Alerts + Analytics          │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1.3 Key Features
+- **Real-time patient location tracking** using RFID technology
+- **Vital signs monitoring** (heart rate, SpO2, body temperature)
+- **Tamper detection** (wristband removal, strap break)
+- **Movement monitoring** (fall detection, abnormal activity)
+- **Zone-based alerts** (restricted areas, unauthorized exits)
+- **Centralized dashboard** with live updates
+- **Historical data logging** for auditing and analysis
+
+---
+
+## 2. HARDWARE SPECIFICATIONS
+
+### 2.1 WEARABLE WRISTBAND UNIT
+
+#### 2.1.1 Main Controller
+**Component:** ESP32-WROOM-32 or ESP32-PICO-D4  
+**Specifications:**
+- Dual-core Xtensa LX6 @ 240MHz
+- 520KB SRAM, 4MB Flash
+- WiFi 802.11 b/g/n (2.4GHz)
+- Bluetooth v4.2 BR/EDR and BLE
+- Operating Voltage: 3.3V
+- Deep Sleep Current: ~10μA
+- Active Current: ~160mA (WiFi TX)
+
+**Why ESP32:**
+- Built-in WiFi for firmware OTA updates
+- Multiple I2C interfaces for sensors
+- Low power modes for battery optimization
+- Sufficient processing power for edge computing
+
+**Selected:** 125kHz Passive RFID Tag (integrated into wristband)
+- Unique ID: 8-10 digit hexadecimal
+- Programmable patient identification
+
+#### 2.1.3 Motion & Orientation Sensor
+**Component:** MPU6050 (6-Axis IMU)  
+**Specifications:**
+- 3-axis Gyroscope: ±250, ±500, ±1000, ±2000°/s
+- 3-axis Accelerometer: ±2g, ±4g, ±8g, ±16g
+- Interface: I2C (400kHz Fast Mode)
+- Operating Voltage: 3.3V
+- Operating Current: 3.9mA
+- I2C Address: 0x68 (default) or 0x69
+
+**Pin Connections:**
+- VCC → 3.3V
+- GND → GND
+- SDA → GPIO21
+- SCL → GPIO22
+- INT → GPIO19 (interrupt for motion detection)
+
+**Detection Capabilities:**
+- Fall detection (sudden acceleration change)
+- Wristband removal (orientation change)
+- Abnormal movement patterns
+- Patient activity level monitoring
+
+#### 2.1.4 Vital Signs Sensor
+**Component:** MAX30102 (Heart Rate + SpO2 Sensor)  
+**Specifications:**
+- Measurement: Heart rate (BPM) and Blood Oxygen (SpO2%)
+- Interface: I2C
+- Operating Voltage: 3.3V
+- Supply Current: 600µA @ 25Hz sampling
+- I2C Address: 0x57
+
+**Pin Connections:**
+- VIN → 3.3V
+- GND → GND
+- SDA → GPIO21 (shared I2C bus with MPU6050)
+- SCL → GPIO22 (shared I2C bus with MPU6050)
+- INT → GPIO18 (interrupt when new data ready)
+
+**Monitoring Features:**
+- Continuous heart rate monitoring (50-100 BPM normal range)
+- Blood oxygen saturation (95-100% normal)
+- Alerts for abnormal readings
+- Confirms wristband is being worn
+
+#### 2.1.5 Temperature Sensor
+**Component:** DHT11 Temperature & Humidity Sensor  
+**Specifications:**
+- Temperature Range: 0-50°C (±2°C accuracy)
+- Humidity Range: 20-90% RH (±5% accuracy)
+- Interface: Single-wire digital
+- Operating Voltage: 3.3V - 5V
+- Sampling Rate: 1Hz (once per second)
+
+**Pin Connections:**
+- VCC → 3.3V
+- GND → GND
+- DATA → GPIO4
+- Pull-up resistor: 10kΩ between DATA and VCC
+
+**Monitoring Purpose:**
+- Body temperature monitoring for fever detection
+- Environmental temperature for contagious patient isolation
+- Alert threshold: >37.5°C (fever indication)
+
+#### 2.1.6 Tamper Detection Sensors
+
+**A. Conductive Thread Strap Break Detection**  
+**Implementation:**
+- Conductive thread (silver-coated nylon) sewn into wristband strap
+- Creates continuous circuit when strap is intact
+- Connected to GPIO15 with pull-up resistor (10kΩ)
+- Circuit breaks when strap is cut or torn
+
+**Pin Connection:**
+- Thread Start → 3.3V
+- Thread End → GPIO15 (INPUT_PULLUP)
+- Detection: LOW = intact, HIGH = broken
+
+**B. Skin Contact Sensor**  
+**Component:** Capacitive Touch Sensor (ESP32 Built-in)  
+**Implementation:**
+- Copper pad on inner wristband surface
+- Connected to ESP32 touch-sensitive GPIO
+- Detects skin conductivity
+
+**Pin Connection:**
+- Touch Pad → GPIO15 (T3 - Touch Pin 3)
+- No external components needed
+
+**Detection Logic:**
+- Continuous touch reading (0-100 scale)
+- Skin contact: Reading < 40
+- No contact: Reading > 60
+- Alert triggered when no contact for >10 seconds
+
+#### 2.1.7 User Feedback Indicators
+
+**LED Indicator**
+- Component: 5mm Green/Red Dual-color LED
+- Pin: GPIO2
+- Current-limiting resistor: 220Ω
+- Status Codes:
+  - Solid Green: Normal operation
+  - Blinking Green: Transmitting data
+  - Solid Red: Low battery
+  - Blinking Red: Alert/tamper detected
+  - Off: Deep sleep mode
+
+**Buzzer (Optional)**
+- Component: Passive buzzer (5V tolerant, 3.3V operated)
+- Pin: GPIO5
+- Purpose: Local alert for patient (medication time, etc.)
+- Frequency: 2kHz
+- Usage: Minimal to save battery
+
+#### 2.1.8 Power System
+
+**Battery:**
+- Type: 3.7V Li-Po Rechargeable
+- Capacity: 500mAh - 1000mAh
+- Dimensions: 40mm × 30mm × 5mm (approx)
+- Protection: Over-charge, over-discharge, short-circuit
+
+**Charging Module:**
+- Component: TP4056 Li-Po Charging Board
+- Input: 5V Micro-USB
+- Charging Current: 500mA (adjustable)
+- LED Indicators: Red (charging), Blue (charged)
+
+**Power Distribution:**
+- Battery → TP4056 OUT+ → ESP32 VIN (or 3.3V via LDO)
+- Battery → TP4056 OUT- → Common GND
+- All sensors powered from ESP32 3.3V rail
+
+**Estimated Battery Life:**
+- Active Mode (WiFi + Sensors): 8-12 hours
+- RFID Mode (ESP32 deep sleep): 3-5 days
+- Hybrid Mode (RFID + periodic WiFi): 1-2 days
+
+#### 2.1.9 Wristband Enclosure
+**Material:** Medical-grade silicone or ABS plastic  
+**Requirements:**
+- Waterproof rating: IP65 minimum
+- Hypoallergenic material
+- Adjustable strap (fits 15-22cm wrist circumference)
+- Secure clasp with conductive thread integration
+- Access port for USB charging
+- Dimensions: ~50mm × 35mm × 15mm
+
+#### 2.1.10 Wristband PCB Layout
+**Form Factor:** Custom PCB (40mm × 30mm)  
+**Layers:** 2-layer PCB  
+**Components Placement:**
+- Top: ESP32, MAX30102, MPU6050, connectors
+- Bottom: RFID tag antenna, battery connector, TP4056
+
+**Wristband Complete Pin Assignment:**
+```
+ESP32 GPIO MAP:
+├── GPIO21 (SDA) ───────► MPU6050 SDA, MAX30102 SDA
+├── GPIO22 (SCL) ───────► MPU6050 SCL, MAX30102 SCL
+├── GPIO19 ─────────────► MPU6050 INT (Interrupt)
+├── GPIO18 ─────────────► MAX30102 INT (Interrupt)
+├── GPIO4 ──────────────► DHT11 DATA
+├── GPIO15 ─────────────► Conductive Strap Sensor (INPUT_PULLUP)
+├── GPIO13 ─────────────► Capacitive Touch (Skin Contact)
+├── GPIO2 ──────────────► LED Indicator
+├── GPIO5 ──────────────► Buzzer (Optional)
+├── 3.3V ───────────────► All Sensors VCC
+├── GND ────────────────► Common Ground
+└── EN (Reset) ─────────► Programming/Reset Button
+```
+
+---
+
+### 2.2 RECEIVER NODE UNIT
+
+#### 2.2.1 Main Controller
+**Component:** ESP32 DevKit V1 (30-pin)  
+**Specifications:**
+- Same as wristband ESP32
+- Powered via Micro-USB (5V, 1A minimum)
+- Mounted in fixed enclosure
+- Always-on operation (no sleep mode)
+
+**SELECTED: RDM6300 125kHz Reader**
+- Frequency: 125kHz
+- Interface: UART (Serial)
+- Read Range: 10-20cm (standard antenna)
+- Operating Voltage: 5V
+)
+
+**Alternative SELECTED: Custom 125kHz Reader Circuit**
+For optimal range (3-5 meters), design custom reader with:
+- TI TMS37157 reader IC
+- Large coil antenna (20cm diameter)
+- Signal amplification circuit
+- Range: 3-5 meters with active tags
+
+#### 2.2.3 Visual Indicator
+**Component:** 10mm RGB LED (Common Cathode)  
+**Pin Connections:**
+- Red → GPIO25 (PWM capable)
+- Green → GPIO26 (PWM capable)
+- Blue → GPIO27 (PWM capable)
+- Common Cathode → GND
+- Current-limiting resistors: 220Ω each
+
+**Status Color Codes:**
+- Blue Blinking: Scanning for RFID tags
+- Green Solid: Tag detected, data sent successfully
+- Yellow: WiFi connecting
+- Red: Error/Alert detected
+- Purple: Tamper alert forwarded
+- Off: Offline/Power saving
+
+#### 2.2.4 Audio Indicator
+**Component:** Active Buzzer (5V)  
+**Pin Connection:**
+- Positive → GPIO14
+- Negative → GND
+- Optional: Transistor driver (2N2222) for louder sound
+
+**Alert Patterns:**
+- Single beep: Tag detected
+- Double beep: Data sent successfully
+- Triple beep: Alert detected
+- Continuous beep: Critical alert (tamper/restricted zone)
+
+#### 2.2.5 Network Connectivity
+**Interface:** WiFi 802.11 b/g/n (2.4GHz)  
+**Connection Type:** Infrastructure mode (connects to hospital WiFi)  
+**Protocol:** HTTPS REST API  
+**Fallback:** Local data storage on SD card if WiFi fails
+
+**Network Configuration:**
+- Static IP assignment (recommended for hospital deployment)
+- DHCP fallback
+- WPA2-Enterprise support (for hospital networks)
+- mDNS for easy discovery during setup
+
+#### 2.2.6 Power Supply
+**Input:** 5V DC, 2A via Micro-USB or DC barrel jack  
+**Backup Power:** Optional UPS or Li-Ion battery pack  
+**Power Consumption:** ~500mA average
+
+#### 2.2.7 Receiver Node Enclosure
+**Material:** ABS plastic wall-mounted box  
+**Dimensions:** 120mm × 80mm × 40mm  
+**Features:**
+- Wall-mounting holes
+- Cable management holes
+- LED/Buzzer openings
+- Ventilation slots
+- IP40 rating minimum
+
+#### 2.2.8 Receiver Node Pin Assignment
+```
+ESP32 GPIO MAP (Receiver):
+├── GPIO16 (RX2) ───────► Inner RDM6300 TX (RFID)
+├── GPIO4 (RX1) ────────► Outer RDM6300 TX (RFID)
+├── GPIO25 ─────────────► RGB LED - Red
+├── GPIO26 ─────────────► RGB LED - Green
+├── GPIO27 ─────────────► RGB LED - Blue
+├── GPIO14 ─────────────► Buzzer
+├── GPIO13 ─────────────► Optional: SD Card CS (for offline storage)
+├── 5V ─────────────────► RDM6300 VCC
+├── 3.3V ───────────────► LED power (through resistors)
+└── GND ────────────────► Common Ground
+```
+
+---
+
+### 2.3 SYSTEM HARDWARE SUMMARY TABLE
+
+| Component | Wristband | Receiver Node | Quantity (10 patients) |
+|-----------|-----------|---------------|------------------------|
+| ESP32-WROOM-32 | ✓ | ✓ | 10 + 5 = 15 |
+| 125kHz Active RFID Tag | ✓ | - | 10 |
+| RDM6300 RFID Reader | - | ✓ | 5 |
+| MPU6050 IMU | ✓ | - | 10 |
+| MAX30102 (HR/SpO2) | ✓ | - | 10 |
+| DHT11 Temperature | ✓ | - | 10 |
+| Conductive Thread | ✓ | - | 10 units |
+| Touch Sensor (Built-in) | ✓ | - | 10 |
+| LED Indicator | ✓ (5mm) | ✓ (10mm RGB) | 10 + 5 = 15 |
+| Buzzer | ✓ (optional) | ✓ | 10 + 5 = 15 |
+| Li-Po Battery 3.7V | ✓ | - | 10 |
+| TP4056 Charger | ✓ | - | 10 |
+| Power Supply 5V 2A | - | ✓ | 5 |
+| Wristband Enclosure | ✓ | - | 10 |
+| Wall-mount Box | - | ✓ | 5 |
+
+---
+
+## 3. SOFTWARE ARCHITECTURE
+
+### 3.1 WRISTBAND FIRMWARE (ESP32)
+
+#### 3.1.1 Operating Modes
+
+**Mode 1: RFID-Only Mode (Default)**
+- ESP32 in deep sleep (10μA)
+- RFID tag continuously broadcasting ID
+- Wake up every 30 minutes for sensor check
+- Battery life: 3-5 days
+
+**Mode 2: Active Monitoring Mode**
+- ESP32 active, all sensors reading
+- RFID broadcasting
+- WiFi enabled for direct data transmission
+- Battery life: 8-12 hours
+- Use case: High-risk patients, isolation wards
+
+**Mode 3: Hybrid Mode**
+- RFID broadcasting continuously
+- ESP32 wakes every 5 minutes for sensor check
+- WiFi enabled only for alerts
+- Battery life: 1-2 days
+
+**Mode 4: Charging Mode**
+- All non-critical functions suspended
+- LED indicates charging status
+- Firmware update capability via USB
+
+#### 3.1.2 Firmware Architecture
+
+```
+Main Loop Flow:
+├── Initialize Hardware
+│   ├── ESP32 initialization
+│   ├── I2C bus setup (MPU6050, MAX30102)
+│   ├── GPIO configuration (DHT11, sensors, LED)
+│   └── RFID tag activation
+│
+├── Sensor Reading Loop (Every 5 seconds)
+│   ├── Read MPU6050 (acceleration, orientation)
+│   ├── Read MAX30102 (heart rate, SpO2)
+│   ├── Read DHT11 (temperature)
+│   ├── Check strap integrity
+│   ├── Check skin contact
+│   └── Process sensor data
+│
+├── Alert Detection Logic
+│   ├── Fall detection (sudden acceleration change)
+│   ├── Tamper detection (strap break or skin contact loss)
+│   ├── Abnormal vitals (HR, SpO2, temp out of range)
+│   └── Set alert flags
+│
+├── Data Transmission (Mode-dependent)
+│   ├── RFID: Continuous broadcast
+│   ├── WiFi: Send data via HTTPS (if alert or scheduled)
+│   └── LED/Buzzer feedback
+│
+└── Power Management
+    ├── Battery level monitoring
+    ├── Sleep mode activation
+    └── Low battery alert
+```
+
+#### 3.1.3 Key Firmware Functions
+
+**Sensor Reading Functions:**
+```cpp
+// Read all sensors and return data structure
+SensorData readAllSensors();
+
+// Individual sensor functions
+AccelData readMPU6050();
+VitalSigns readMAX30102();
+float readDHT11Temperature();
+bool checkStrapIntegrity();
+bool checkSkinContact();
+```
+
+**Alert Detection Functions:**
+```cpp
+// Detect falls based on acceleration
+bool detectFall(AccelData data);
+
+// Detect wristband removal
+bool detectTamper();
+
+// Check if vitals are abnormal
+bool checkAbnormalVitals(VitalSigns vitals);
+```
+
+**Communication Functions:**
+```cpp
+// Connect to WiFi
+bool connectWiFi();
+
+// Send data via HTTPS
+bool sendDataToServer(SensorData data);
+
+// Handle server response
+void handleServerResponse(String response);
+```
+
+**Power Management Functions:**
+```cpp
+// Enter deep sleep for N seconds
+void enterDeepSleep(int seconds);
+
+// Check battery level
+float getBatteryLevel();
+
+// Low battery alert
+void lowBatteryAlert();
+```
+
+#### 3.1.4 Wristband Data Packet Structure
+
+```json
+{
+  "device_id": "WB-ENE211-0266",
+  "patient_id": "PT-0266",
+  "rfid_tag": "A1B2C3D4E5",
+  "timestamp": "2025-12-18T14:30:45Z",
+  "battery_level": 85,
+  "sensors": {
+    "mpu6050": {
+      "accel_x": 0.05,
+      "accel_y": 0.98,
+      "accel_z": 0.12,
+      "gyro_x": -2.3,
+      "gyro_y": 1.1,
+      "gyro_z": 0.5,
+      "fall_detected": false
+    },
+    "max30102": {
+      "heart_rate": 72,
+      "spo2": 98,
+      "signal_quality": "good"
+    },
+    "dht11": {
+      "temperature": 36.8,
+      "humidity": 45
+    },
+    "tamper": {
+      "strap_intact": true,
+      "skin_contact": true,
+      "tamper_alert": false
+    }
+  },
+  "alerts": {
+    "fall": false,
+    "tamper": false,
+    "abnormal_vitals": false,
+    "low_battery": false
+  }
+}
+```
+
+---
+
+### 3.2 RECEIVER NODE FIRMWARE (ESP32)
+
+#### 3.2.1 Operating Logic
+
+```
+Main Loop Flow:
+├── Initialize Hardware
+│   ├── ESP32 initialization
+│   ├── RFID reader setup (UART communication)
+│   ├── WiFi connection
+│   └── LED/Buzzer setup
+│
+├── RFID Scanning Loop (Continuous)
+│   ├── Read RFID tag data
+│   ├── Parse tag ID
+│   ├── Measure signal strength (if available)
+│   ├── Estimate distance (based on RSSI/signal)
+│   └── LED blink on detection
+│
+├── Data Processing
+│   ├── Add receiver location info
+│   ├── Add timestamp
+│   ├── Check for zone violations
+│   └── Prepare JSON payload
+│
+├── Data Transmission (Every 2-5 seconds)
+│   ├── Batch multiple detections
+│   ├── Send via HTTPS POST to server
+│   ├── Handle response
+│   ├── LED/Buzzer feedback
+│   └── Retry on failure (up to 3 attempts)
+│
+└── Health Monitoring
+    ├── WiFi connection check
+    ├── Server heartbeat
+    └── LED status indication
+```
+
+#### 3.2.2 Receiver Node Data Packet
+
+```json
+{
+  "receiver_id": "RX-WARD-A-001",
+  "location": {
+    "zone": "General Ward A",
+    "room": "Corridor-1",
+    "coordinates": {"x": 10.5, "y": 5.2, "z": 0}
+  },
+  "timestamp": "2025-12-18T14:30:50Z",
+  "detected_tags": [
+    {
+      "rfid_tag": "A1B2C3D4E5",
+      "patient_id": "PT-0266",
+      "signal_strength": -45,
+      "estimated_distance": 2.3,
+      "detection_count": 5
+    },
+    {
+      "rfid_tag": "F6G7H8I9J0",
+      "patient_id": "PT-0267",
+      "signal_strength": -68,
+      "estimated_distance": 5.1,
+      "detection_count": 3
+    }
+  ],
+  "receiver_status": {
+    "uptime": 86400,
+    "wifi_strength": -52,
+    "free_memory": 230000
+  }
+}
+```
+
+#### 3.2.3 Zone Detection Logic
+
+Each receiver node is configured with:
+- Zone name (e.g., "Corridor-1", "Exit Door", "Medication Room")
+- Zone type (e.g., "normal", "restricted", "exit")
+- Alert rules (e.g., "alert if unauthorized patient detected")
+
+```cpp
+// Example zone configuration
+struct Zone {
+  String zone_name;
+  String zone_type; // "normal", "restricted", "exit", "isolation"
+  bool require_authorization;
+  int max_occupancy;
+  String[] authorized_patients;
+};
+
+// Check if detection should trigger alert
+bool checkZoneViolation(String patient_id, Zone zone) {
+  if (zone.zone_type == "restricted" && 
+      !isAuthorized(patient_id, zone.authorized_patients)) {
+    return true; // Trigger alert
+  }
+  return false;
+}
+```
+
+---
+
+### 3.3 BACKEND SERVER ARCHITECTURE
+
+#### 3.3.1 Technology Stack
+
+**Server Framework:** Python fast API
+**Database:** SQLite  
+**Real-time:** Socket.io for WebSocket connections  
+**Authentication:** JWT (JSON Web Tokens)  
+**SSL/HTTPS:** Let's Encrypt or commercial SSL certificate  
+**API Documentation:** Swagger/OpenAPI  
+
+#### 3.3.2 Server Components
+
+```
+Backend Structure:
+├── /api
+│   ├── /v1
+│   │   ├── /location-update (POST) - Receiver data ingestion
+│   │   ├── /patients (GET) - List all patients
+│   │   ├── /patients/:id (GET) - Patient details
+│   │   ├── /patients/:id/location (GET) - Current location
+│   │   ├── /patients/:id/history (GET) - Movement history
+│   │   ├── /patients/:id/vitals (GET) - Latest vital signs
+│   │   ├── /alerts (GET) - Active alerts
+│   │   ├── /alerts/:id/acknowledge (POST) - Acknowledge alert
+│   │   ├── /zones (GET) - All zones
+│   │   └── /receivers (GET) - All receiver nodes
+│   └── /auth
+│       ├── /login (POST) - Staff authentication
+│       └── /refresh (POST) - Token refresh
+│
+├── /ws
+│   └── /live (WebSocket) - Real-time updates
+│
+├── /services
+│   ├── locationService - Location processing
+│   ├── alertService - Alert generation logic
+│   ├── vitalService - Vital signs analysis
+│   └── notificationService - SMS/Email notifications
+│
+├── /models
+│   ├── Patient
+│   ├── Receiver
+│   ├── LocationHistory
+│   ├── Alert
+│   └── User
+│
+└── /middleware
+    ├── authenticate - JWT verification
+    ├── rateLimit - API rate limiting
+    └── validateInput - Input sanitization
+```
+
+#### 3.3.3 API Endpoints Specification
+
+**1. Location Update (Receiver → Server)**
+```
+POST /api/v1/location-update
+Headers:
+  - Content-Type: application/json
+  - X-API-Key: <receiver_api_key>
+  
+Body: (See Receiver Node Data Packet above)
+
+Response:
+{
+  "success": true,
+  "message": "Data received",
+  "alerts_triggered": 0,
+  "timestamp": "2025-12-18T14:30:51Z"
+}
+```
+
+**2. Get Patient Current Location**
+```
+GET /api/v1/patients/PT-0266/location
+Headers:
+  - Authorization: Bearer <jwt_token>
+
+Response:
+{
+  "patient_id": "PT-0266",
+  "name": "Abel Atuke Nyambane",
+  "current_location": {
+    "zone": "General Ward A",
+    "room": "Corridor-1",
+    "coordinates": {"x": 10.5, "y": 5.2},
+    "receiver_id": "RX-WARD-A-001",
+    "last_seen": "2025-12-18T14:30:50Z",
+    "estimated_distance": 2.3
+  },
+  "vitals": {
+    "heart_rate": 72,
+    "spo2": 98,
+    "temperature": 36.8
+  },
+  "status": "normal"
+}
+```
+
+**3. Get Active Alerts**
+```
+GET /api/v1/alerts?status=

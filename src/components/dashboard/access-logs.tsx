@@ -1,86 +1,24 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Filter, Clock, User, MapPin } from "lucide-react";
-
-interface AccessLog {
-  id: string;
-  patientId: string;
-  patientName: string;
-  room: string;
-  action: 'entry' | 'exit' | 'denied';
-  timestamp: Date;
-  rfidId: string;
-  duration?: string;
-}
-
-const mockAccessLogs: AccessLog[] = [
-  {
-    id: 'LOG001',
-    patientId: 'P001',
-    patientName: 'John Smith',
-    room: 'R101',
-    action: 'entry',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    rfidId: 'RFID_001'
-  },
-  {
-    id: 'LOG002',
-    patientId: 'P002',
-    patientName: 'Sarah Johnson',
-    room: 'R104',
-    action: 'entry',
-    timestamp: new Date(Date.now() - 12 * 60 * 1000),
-    rfidId: 'RFID_002',
-    duration: '45 min'
-  },
-  {
-    id: 'LOG003',
-    patientId: 'P004',
-    patientName: 'Emily Wilson',
-    room: 'Common Area',
-    action: 'denied',
-    timestamp: new Date(Date.now() - 18 * 60 * 1000),
-    rfidId: 'RFID_004'
-  },
-  {
-    id: 'LOG004',
-    patientId: 'P003',
-    patientName: 'Michael Davis',
-    room: 'R103',
-    action: 'exit',
-    timestamp: new Date(Date.now() - 25 * 60 * 1000),
-    rfidId: 'RFID_003',
-    duration: '2h 15min'
-  },
-  {
-    id: 'LOG005',
-    patientId: 'P005',
-    patientName: 'Robert Brown',
-    room: 'R203',
-    action: 'entry',
-    timestamp: new Date(Date.now() - 32 * 60 * 1000),
-    rfidId: 'RFID_005'
-  },
-  {
-    id: 'LOG006',
-    patientId: 'P001',
-    patientName: 'John Smith',
-    room: 'Pharmacy',
-    action: 'denied',
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    rfidId: 'RFID_001'
-  }
-];
+import { Search, Download, Clock, User, MapPin } from "lucide-react";
+import { fetchAccessLogs, type AccessLogDto, type AccessAction } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AccessLogs() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState<'all' | 'entry' | 'exit' | 'denied'>('all');
+  const { data: serverLogs, isLoading, isError } = useQuery<AccessLogDto[]>({
+    queryKey: ["access-logs"],
+    queryFn: fetchAccessLogs,
+    refetchInterval: 30_000,
+  });
 
-  const filteredLogs = mockAccessLogs.filter(log => {
+  const filteredLogs = (serverLogs ?? []).filter(log => {
     const matchesSearch = 
       log.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.patientId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -91,7 +29,9 @@ export default function AccessLogs() {
     return matchesSearch && matchesFilter;
   });
 
-  const getActionBadge = (action: AccessLog['action']) => {
+  const { toast } = useToast();
+
+  const getActionBadge = (action: AccessAction) => {
     switch (action) {
       case 'entry':
         return <Badge variant="default" className="bg-success text-success-foreground">Entry</Badge>;
@@ -102,6 +42,66 @@ export default function AccessLogs() {
     }
   };
 
+  const handleExportCsv = () => {
+    if (!serverLogs || serverLogs.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are currently no access logs available for export.",
+      });
+      return;
+    }
+
+    const rows = filteredLogs.length > 0 ? filteredLogs : serverLogs;
+
+    const headers = [
+      "timestamp",
+      "patient_id",
+      "patient_name",
+      "room",
+      "action",
+      "duration",
+      "rfid_id",
+    ];
+
+    const csvLines = [
+      headers.join(","),
+      ...rows.map((log) => {
+        const safe = (value: string | null | undefined) => {
+          const str = value ?? "";
+          // Escape quotes and commas
+          if (/[",\n]/.test(str)) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        const ts = new Date(log.timestamp).toISOString();
+
+        return [
+          safe(ts),
+          safe(log.patientId),
+          safe(log.patientName),
+          safe(log.room),
+          safe(log.action),
+          safe(log.duration ?? ""),
+          safe(log.rfidId),
+        ].join(",");
+      }),
+    ].join("\n");
+
+    const blob = new Blob([csvLines], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `room-access-logs-${timestamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -110,7 +110,13 @@ export default function AccessLogs() {
             <Clock className="h-5 w-5" />
             <span>Room Access Logs</span>
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handleExportCsv}
+            disabled={isLoading}
+          >
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
@@ -144,6 +150,11 @@ export default function AccessLogs() {
       
       <CardContent className="p-0">
         <div className="max-h-80 overflow-y-auto">
+          {isError && !serverLogs && (
+            <div className="p-4 text-sm text-destructive">
+              Unable to load room access logs from server.
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
@@ -156,38 +167,41 @@ export default function AccessLogs() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLogs.map((log) => (
-                <TableRow key={log.id} className="hover:bg-accent/50">
-                  <TableCell className="font-mono text-xs">
-                    {log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{log.patientName}</span>
-                      <span className="text-xs text-muted-foreground">{log.patientId}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm">{log.room}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {getActionBadge(log.action)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {log.duration || '-'}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {log.rfidId.slice(-3)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredLogs.map((log) => {
+                const ts = new Date(log.timestamp);
+                return (
+                  <TableRow key={log.id} className="hover:bg-accent/50">
+                    <TableCell className="font-mono text-xs">
+                      {ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{log.patientName}</span>
+                        <span className="text-xs text-muted-foreground">{log.patientId}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-sm">{log.room}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {getActionBadge(log.action)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {log.duration || '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {log.rfidId.slice(-3)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           
-          {filteredLogs.length === 0 && (
+          {!isLoading && filteredLogs.length === 0 && (
             <div className="p-8 text-center text-muted-foreground">
               <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>No access logs found</p>

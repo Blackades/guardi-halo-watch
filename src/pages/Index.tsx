@@ -1,14 +1,42 @@
 import { useState } from "react";
-import { Activity, Shield, Users, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { Activity, Shield, Users, Clock, User, ChevronDown, FileText } from "lucide-react";
 import HospitalFloorPlan from "@/components/dashboard/hospital-floor-plan";
 import PatientPanel from "@/components/dashboard/patient-panel";
 import NotificationPanel from "@/components/dashboard/notification-panel";
 import AccessLogs from "@/components/dashboard/access-logs";
+import ZoneManagement from "@/components/dashboard/zone-management";
+import UserProfile from "@/components/auth/UserProfile";
+import RoleGuard from "@/components/auth/RoleGuard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { fetchOverview, type OverviewStats } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string>();
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const { data: overview } = useQuery<OverviewStats>({
+    queryKey: ["overview"],
+    queryFn: fetchOverview,
+    // This data changes slowly; keep it fresh but don't spam the server
+    refetchInterval: 15_000,
+  });
+
+  const uptimeLabel = (() => {
+    if (!overview) return "—";
+    const minutesTotal = Math.floor(overview.systemUptimeSeconds / 60);
+    const hours = Math.floor(minutesTotal / 60);
+    const minutes = minutesTotal % 60;
+    if (hours === 0) return `${minutes} min`;
+    return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -21,7 +49,7 @@ const Index = () => {
                 <Activity className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">MedWatch Hospital</h1>
+                <h1 className="text-2xl font-bold text-foreground">Aga Khan Hospital</h1>
                 <p className="text-sm text-muted-foreground">Real-time Patient Monitoring System</p>
               </div>
             </div>
@@ -31,10 +59,36 @@ const Index = () => {
                 <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
                 System Online
               </Badge>
-              <div className="text-right">
-                <p className="text-sm font-medium">Dr. Sarah Mitchell</p>
-                <p className="text-xs text-muted-foreground">Chief of Staff</p>
-              </div>
+              
+              <RoleGuard allowedRoles={['admin', 'doctor']}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/reports')}
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Reports
+                </Button>
+              </RoleGuard>
+              
+              <Popover open={showUserProfile} onOpenChange={setShowUserProfile}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2 h-auto p-2">
+                    <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
+                      <User className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{user?.fullName || user?.username}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <UserProfile onClose={() => setShowUserProfile(false)} />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
         </div>
@@ -48,7 +102,9 @@ const Index = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Active Patients</p>
-                  <p className="text-2xl font-bold text-primary">5</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {overview?.activePatients ?? "—"}
+                  </p>
                 </div>
                 <Users className="h-8 w-8 text-primary/60" />
               </div>
@@ -60,7 +116,9 @@ const Index = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Available Rooms</p>
-                  <p className="text-2xl font-bold text-success">3</p>
+                  <p className="text-2xl font-bold text-success">
+                    {overview?.availableRooms ?? "—"}
+                  </p>
                 </div>
                 <Shield className="h-8 w-8 text-success/60" />
               </div>
@@ -72,7 +130,9 @@ const Index = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Active Alerts</p>
-                  <p className="text-2xl font-bold text-destructive">2</p>
+                  <p className="text-2xl font-bold text-destructive">
+                    {overview?.activeAlerts ?? "0"}
+                  </p>
                 </div>
                 <Activity className="h-8 w-8 text-destructive/60" />
               </div>
@@ -84,7 +144,9 @@ const Index = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">System Uptime</p>
-                  <p className="text-2xl font-bold text-info">99.9%</p>
+                  <p className="text-2xl font-bold text-info">
+                    {uptimeLabel}
+                  </p>
                 </div>
                 <Clock className="h-8 w-8 text-info/60" />
               </div>
@@ -103,6 +165,9 @@ const Index = () => {
                   setSelectedPatientId(room.patientId);
                 }
               }}
+              onPatientClick={(patient) => {
+                setSelectedPatientId(patient.id);
+              }}
             />
           </div>
           
@@ -115,12 +180,17 @@ const Index = () => {
           </div>
           
           {/* Notifications */}
-          <div className="col-span-12 lg:col-span-4">
+          <div className="col-span-12 lg:col-span-6">
             <NotificationPanel />
           </div>
           
+          {/* Zone Management */}
+          <div className="col-span-12 lg:col-span-6">
+            <ZoneManagement />
+          </div>
+          
           {/* Access Logs */}
-          <div className="col-span-12 lg:col-span-8">
+          <div className="col-span-12">
             <AccessLogs />
           </div>
         </div>
