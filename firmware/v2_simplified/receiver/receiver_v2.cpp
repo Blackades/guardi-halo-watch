@@ -19,7 +19,7 @@
 // Configuration
 const char* WIFI_SSID = "Brightburn";
 const char* WIFI_PASS = "p434/0Q2";
-const char* BACKEND_URL = "https://api.jewelisbeast.xyz/api/v1/location-update";
+const char* BACKEND_URL = "https://zuvoo.xyz/api/v1/location-update";
 const char* RECEIVER_ID = "RX-A1";
 const char* WARD_ZONE = "WARD_A";
 const char* ROOM_CODE = "R01";

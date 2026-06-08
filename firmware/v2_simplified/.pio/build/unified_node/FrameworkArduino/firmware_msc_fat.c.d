@@ -1,0 +1,3 @@
+.pio/build/unified_node/FrameworkArduino/firmware_msc_fat.c.o: \
+ C:/Users/black/.platformio/packages/framework-arduinoespressif32/cores/esp32/firmware_msc_fat.c \
+ C:/Users/black/.platformio/packages/framework-arduinoespressif32/cores/esp32/firmware_msc_fat.h

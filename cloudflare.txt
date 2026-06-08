@@ -1,3 +1,3 @@
 cloudflared tunnel create my-tunnel
-cloudflared tunnel route dns my-tunnel api.jewelisbeast.xyz
+cloudflared tunnel route dns my-tunnel zuvoo.xyz
 cloudflared tunnel run --url http://localhost:8000 my-tunnel

@@ -17,7 +17,7 @@
 // Configuration
 const char* WIFI_SSID = "Brightburn";
 const char* WIFI_PASS = "p434/0Q2";
-const char* BACKEND_URL = "https://api.jewelisbeast.xyz/api/v1/door-event";
+const char* BACKEND_URL = "https://zuvoo.xyz/api/v1/door-event";
 const char* READER_ID = "DR-WARD-A";
 
 // RDM6300 Configuration

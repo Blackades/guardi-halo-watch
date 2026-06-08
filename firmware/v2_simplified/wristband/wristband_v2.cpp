@@ -23,7 +23,12 @@
 // --- Project Configuration ---
 const char* WIFI_SSID = "Brightburn";
 const char* WIFI_PASS = "p434/0Q2";
-const char* BACKEND_URL = "https://api.jewelisbeast.xyz/api/v1";
+const char* BACKEND_URL = "https://zuvoo.xyz/api/v1";
+
+// Shared iBeacon proximity UUID. MUST match GUARDI_BEACON_UUID in
+// unified_node_v2.cpp so the unified node accepts our advertisements.
+#define GUARDI_BEACON_UUID "43210000-1234-5678-1234-567890abcdef"
+#define GUARDI_BEACON_MAJOR 100
 
 // --- State & Storage ---
 Preferences prefs;
@@ -158,9 +163,9 @@ void setupBeacon() {
     pAdvertising = BLEDevice::getAdvertising();
     
     BLEBeacon oBeacon = BLEBeacon();
-    oBeacon.setManufacturerId(0x4C00); 
-    oBeacon.setProximityUUID(BLEUUID("43210000-1234-5678-1234-567890abcdef"));
-    oBeacon.setMajor(100);
+    oBeacon.setManufacturerId(0x4C00);
+    oBeacon.setProximityUUID(BLEUUID(GUARDI_BEACON_UUID));
+    oBeacon.setMajor(GUARDI_BEACON_MAJOR);
     oBeacon.setMinor(currentPatient.ble_minor);
     
     BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();

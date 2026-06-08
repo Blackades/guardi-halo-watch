@@ -44,7 +44,7 @@ function deriveStatus(
   patients: PatientSummary[]
 ): RoomSummary["status"] {
   const here = getPatientsInRoom(room, patients);
-  if (here.length === 0) return room.status;
+  if (here.length === 0) return "normal";
   if (here.some((p) => p.status === "anomaly" || p.strap_intact === false)) return "anomaly";
   if (here.some((p) => p.status === "warning")) return "warning";
   return "occupied";
@@ -206,9 +206,8 @@ export default function HospitalFloorPlan({
   });
 
   const { data: patients = [] } = useQuery<PatientSummary[]>({
-    queryKey: ["patients-for-floorplan"],
+    queryKey: ["patients"],
     queryFn: fetchPatients,
-    staleTime: 10_000,
   });
 
   // Animate alert pulse every 600 ms
@@ -246,8 +245,19 @@ export default function HospitalFloorPlan({
     const isHovered = hoveredSlot === slot.matchKey;
     const hasSelectedPatient =
       !!selectedPatientId && patientsHere.some((p) => p.id === selectedPatientId);
+    
+    // Check if room is occupied by a foreign patient
+    const hasForeignPatient = room ? patientsHere.some((p) => p.id !== room.patientId) : false;
     const isAlert = sk === "anomaly" || sk === "restricted";
     const pulseOn = isAlert && pulseFrame % 2 === 0;
+
+    const roomFill = hasForeignPatient ? "#f5d0fe" : (pulseOn ? "#fca5a5" : STATUS_FILL[sk]);
+    const roomStroke = hasForeignPatient ? "#d946ef" : (hasSelectedPatient ? "#6366f1" : "#334155");
+    const roomStrokeWidth = hasSelectedPatient ? 3 : (isHovered || hasForeignPatient ? 2.5 : 2);
+    const roomStrokeDash = hasForeignPatient ? "4 2" : (hasSelectedPatient ? "6 3" : undefined);
+    const textFill = hasForeignPatient ? "#86198f" : STATUS_TEXT[sk];
+    const dotFill = hasForeignPatient ? "#d946ef" : STATUS_DOT[sk];
+    const labelText = hasForeignPatient ? "Foreign Occupant" : STATUS_LABEL[sk];
 
     const cx = slot.x + slot.width / 2;
     const cy = slot.y + slot.height / 2;
@@ -276,10 +286,10 @@ export default function HospitalFloorPlan({
           y={slot.y}
           width={slot.width}
           height={slot.height}
-          fill={pulseOn ? "#fca5a5" : STATUS_FILL[sk]}
-          stroke={hasSelectedPatient ? "#6366f1" : "#334155"}
-          strokeWidth={hasSelectedPatient ? 3 : isHovered ? 2.5 : 2}
-          strokeDasharray={hasSelectedPatient ? "6 3" : undefined}
+          fill={roomFill}
+          stroke={roomStroke}
+          strokeWidth={roomStrokeWidth}
+          strokeDasharray={roomStrokeDash}
           style={{ transition: "fill 0.3s" }}
         />
 
@@ -288,10 +298,10 @@ export default function HospitalFloorPlan({
           cx={cx - 18}
           cy={cy + slot.height * 0.18}
           r={5}
-          fill={STATUS_DOT[sk]}
+          fill={dotFill}
         />
         {/* Alert pulse ring */}
-        {isAlert && (
+        {isAlert && !hasForeignPatient && (
           <circle
             cx={cx - 18}
             cy={cy + slot.height * 0.18}
@@ -311,7 +321,7 @@ export default function HospitalFloorPlan({
           textAnchor="middle"
           fontSize={13}
           fontWeight={500}
-          fill={STATUS_TEXT[sk]}
+          fill={textFill}
         >
           {room?.name ?? slot.fallbackLabel}
         </text>
@@ -322,9 +332,9 @@ export default function HospitalFloorPlan({
           y={cy + 8}
           textAnchor="middle"
           fontSize={10}
-          fill={STATUS_TEXT[sk]}
+          fill={textFill}
         >
-          {STATUS_LABEL[sk]}
+          {labelText}
           {patientsHere.length > 0 ? ` · ${patientsHere.length}pt` : ""}
         </text>
 
@@ -337,7 +347,7 @@ export default function HospitalFloorPlan({
               width={130}
               height={42}
               fill="white"
-              stroke="#e2e8f0"
+              stroke={hasForeignPatient ? "#d946ef" : "#e2e8f0"}
               strokeWidth={0.8}
               rx={3}
               filter="url(#shadow)"
@@ -357,9 +367,9 @@ export default function HospitalFloorPlan({
               y={cy + 8}
               textAnchor={ttAnchor}
               fontSize={10}
-              fill="#6b7280"
+              fill={hasForeignPatient ? "#86198f" : "#6b7280"}
             >
-              {STATUS_LABEL[sk]} · {patientsHere.length} patient
+              {labelText} · {patientsHere.length} patient
               {patientsHere.length !== 1 ? "s" : ""}
             </text>
           </g>
@@ -372,12 +382,20 @@ export default function HospitalFloorPlan({
             const py = slot.y + slot.height - 20;
             const isSelPat = selectedPatientId === patient.id;
             const isHovPat = hoveredPatient === patient.id;
-            const pColor =
-              patient.status === "anomaly"
+            
+            // Check if patient is foreign to this room
+            const isForeign = room ? patient.id !== room.patientId : false;
+            const pColor = isForeign
+              ? "#ef4444"
+              : patient.status === "anomaly"
                 ? "#ef4444"
                 : patient.status === "warning"
                   ? "#f59e0b"
                   : "#3b82f6";
+            
+            const isRightWing = slot.wing === "right";
+            const ttPatientX = isRightWing ? px - 180 : px + 10;
+
             return (
               <g
                 key={patient.id}
@@ -389,6 +407,19 @@ export default function HospitalFloorPlan({
                 onMouseLeave={() => setHoveredPatient(null)}
                 className="cursor-pointer"
               >
+                {/* Outer pulsing ring for foreign patient */}
+                {isForeign && (
+                  <circle
+                    cx={px}
+                    cy={py}
+                    r={pulseFrame % 2 === 0 ? 9 : 5}
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth={1.5}
+                    strokeOpacity={pulseFrame % 2 === 0 ? 0.6 : 0.1}
+                    style={{ transition: "all 0.3s" }}
+                  />
+                )}
                 <circle
                   cx={px}
                   cy={py}
@@ -397,10 +428,34 @@ export default function HospitalFloorPlan({
                   stroke="white"
                   strokeWidth={1}
                 />
+                
+                {/* Full detailed patient tooltip on hover */}
                 {isHovPat && (
-                  <text x={px} y={py - 8} textAnchor="middle" fontSize={8} fill="#111827">
-                    {patient.name}
-                  </text>
+                  <g>
+                    <rect
+                      x={ttPatientX}
+                      y={py - 35}
+                      width={170}
+                      height={75}
+                      fill="white"
+                      stroke={pColor}
+                      strokeWidth={1}
+                      rx={4}
+                      filter="url(#shadow)"
+                    />
+                    <text x={ttPatientX + 8} y={py - 20} fontSize={11} fontWeight={600} fill="#111827">
+                      {patient.name}
+                    </text>
+                    <text x={ttPatientX + 8} y={py - 7} fontSize={9} fill="#4b5563">
+                      ID: {patient.id}
+                    </text>
+                    <text x={ttPatientX + 8} y={py + 6} fontSize={9} fill="#4b5563">
+                      Assigned Room: {rooms.find((r) => r.patientId === patient.id)?.name || "None"}
+                    </text>
+                    <text x={ttPatientX + 8} y={py + 19} fontSize={9} fill={isForeign ? "#ef4444" : "#6b7280"} fontWeight={isForeign ? 500 : 400}>
+                      {isForeign ? "Unauthorized Entry" : `Last Activity: ${patient.lastActivity || "Just now"}`}
+                    </text>
+                  </g>
                 )}
               </g>
             );
@@ -522,6 +577,9 @@ export default function HospitalFloorPlan({
               <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
                 <line x1="0" y1="0" x2="0" y2="6" stroke="#94a3b8" strokeWidth={0.6} strokeOpacity={0.3} />
               </pattern>
+              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
+              </filter>
             </defs>
 
             {/* Outer building shell */}
@@ -537,7 +595,6 @@ export default function HospitalFloorPlan({
             </text>
             <line x1={210} y1={204} x2={240} y2={204} stroke="#94a3b8" strokeWidth={0.8} strokeDasharray="3 2" />
             <line x1={280} y1={204} x2={310} y2={204} stroke="#94a3b8" strokeWidth={0.8} strokeDasharray="3 2" />
-
             {/* Rooms */}
             {viewMode !== "patients" && ROOM_SLOTS.map(renderRoom)}
 
@@ -576,6 +633,84 @@ export default function HospitalFloorPlan({
               <text x={0} y={4} textAnchor="middle" fontSize={9} fill="#475569" fontWeight={500}>N</text>
               <path d="M 0 -12 L 3 -4 L 0 -7 L -3 -4 Z" fill="#334155" />
             </g>
+
+            {/* Corridor Patients (pulsing red dots) — rendered at the very end to stay on top of right wing */}
+            {viewMode !== "rooms" &&
+              patients
+                .filter((p) => (p.room ?? "").toLowerCase() === "corr" || (p.location ?? "").toLowerCase() === "corridor")
+                .map((patient, idx) => {
+                  const cx = 260;
+                  const cy = 80 + idx * 45;
+                  const isSelPat = selectedPatientId === patient.id;
+                  const isHovPat = hoveredPatient === patient.id;
+
+                  // Find assigned room name
+                  const assignedRoom = rooms.find((r) => r.patientId === patient.id);
+                  const assignedRoomName = assignedRoom ? assignedRoom.name : "None";
+
+                  return (
+                    <g
+                      key={patient.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPatientClick?.(patient);
+                      }}
+                      onMouseEnter={() => setHoveredPatient(patient.id)}
+                      onMouseLeave={() => setHoveredPatient(null)}
+                      className="cursor-pointer"
+                    >
+                      {/* Outer pulsing ring */}
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={pulseFrame % 2 === 0 ? 11 : 6}
+                        fill="none"
+                        stroke="#ef4444"
+                        strokeWidth={1.5}
+                        strokeOpacity={pulseFrame % 2 === 0 ? 0.6 : 0.1}
+                        style={{ transition: "all 0.3s" }}
+                      />
+                      {/* Inner dot */}
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={isSelPat ? 6 : isHovPat ? 5.5 : 5}
+                        fill="#ef4444"
+                        stroke="white"
+                        strokeWidth={1}
+                      />
+
+                      {/* Tooltip for corridor patient details */}
+                      {isHovPat && (
+                        <g>
+                          <rect
+                            x={cx + 12}
+                            y={cy - 35}
+                            width={170}
+                            height={75}
+                            fill="white"
+                            stroke="#ef4444"
+                            strokeWidth={1}
+                            rx={4}
+                            filter="url(#shadow)"
+                          />
+                          <text x={cx + 20} y={cy - 20} fontSize={11} fontWeight={600} fill="#111827">
+                            {patient.name}
+                          </text>
+                          <text x={cx + 20} y={cy - 7} fontSize={9} fill="#4b5563">
+                            ID: {patient.id}
+                          </text>
+                          <text x={cx + 20} y={cy + 6} fontSize={9} fill="#4b5563">
+                            Assigned Room: {assignedRoomName}
+                          </text>
+                          <text x={cx + 20} y={cy + 19} fontSize={9} fill="#ef4444" fontWeight={500}>
+                            Exited: {patient.lastActivity || "Just now"}
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })}
           </svg>
         </div>
 

@@ -291,6 +291,33 @@ export default function NotificationPanel() {
               queryClient.invalidateQueries({ queryKey: ["patients"] });
               queryClient.invalidateQueries({ queryKey: ["rooms"] });
             }
+            else if (payload.event === "patient_deleted") {
+              const { patient_id } = payload.data;
+              toast({
+                title: "Patient Deassigned",
+                description: `Patient ID ${patient_id} has been deassigned and removed.`,
+              });
+              
+              // Remove notifications for this patient
+              setNotifications(prev => prev.filter(n => n.patientId !== patient_id));
+              
+              // Refresh data
+              queryClient.invalidateQueries({ queryKey: ["patients"] });
+              queryClient.invalidateQueries({ queryKey: ["rooms"] });
+              queryClient.invalidateQueries({ queryKey: ["alerts"] });
+            }
+            else if (payload.event === "patient_assigned") {
+              const { name, patient_id, location } = payload.data;
+              toast({
+                title: "Patient Assigned",
+                description: `${name} (${patient_id}) assigned to ${location}.`,
+              });
+              
+              // Refresh data
+              queryClient.invalidateQueries({ queryKey: ["patients"] });
+              queryClient.invalidateQueries({ queryKey: ["rooms"] });
+              queryClient.invalidateQueries({ queryKey: ["alerts"] });
+            }
           } catch (e) {
             console.error("[WebSocket] Payload parsing error:", e);
           }

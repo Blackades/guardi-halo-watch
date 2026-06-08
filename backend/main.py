@@ -582,6 +582,19 @@ def get_overview(db: Session = Depends(get_db), current_user: models.User = Depe
     )
 
 
+@app.get("/api/v1/patients/active-assignments")
+def list_active_assignments(db: Session = Depends(get_db)):
+    """List all active patient assignments with rfid_uid and assigned room."""
+    patients = db.query(models.Patient).filter(models.Patient.rfid_uid != None).all()
+    return [
+        {
+            "rfid_uid": p.rfid_uid,
+            "room": p.room or ""
+        }
+        for p in patients
+    ]
+
+
 @app.get("/api/v1/patients/{patient_id}", response_model=schemas.PatientSummary)
 def get_patient_detail(
     patient_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(require_any_role)
@@ -1182,97 +1195,194 @@ async def ingest_door_event(
     buzzer_trigger = False
     action_type = "entry"
 
-    if door_code == "ENTRY":
-        # Symmetrical Toggle for WARD exit/entry via ENTRY gate
-        if patient.location and patient.location != "Outside Ward":
-            # Exit Ward Area
-            patient.room = None
-            patient.location = "Outside Ward"
-            patient.status = "anomaly"
-            action_type = "exit"
-            buzzer_trigger = True  # Always buzz on ward egress
+    # Find the patient's assigned/admitted room from the rooms table
+    assigned_room_rec = db.query(models.Room).filter(models.Room.patient_id == patient.patient_id).first()
+    assigned_room_code = assigned_room_rec.room_code if assigned_room_rec else None
 
-            alert_data = {
-                "type": "unauthorized_exit",
-                "severity": "critical",
-                "title": "Unauthorized Exit Alert",
-                "message": f"Patient {patient.name} has left the ward area.",
-                "patient_id": patient.patient_id,
-                "room": "Exit Door",
-                "metadata": {"rfid_uid": payload.rfid_uid}
-            }
-            alert = alert_engine.create_alert(db, alert_data)
-            if alert:
-                await ws_manager.broadcast({
-                    "event": "alert_created",
-                    "data": {
-                        "id": alert.alert_code,
-                        "type": alert.type,
-                        "title": alert.title,
-                        "message": alert.message,
-                        "timestamp": alert.created_at.isoformat(),
-                        "patientId": alert.patient_id,
-                    }
-                })
-        else:
-            # Entering Ward Area -> Goes into Corridor
-            patient.room = "CORR"
-            patient.location = "Corridor"
-            patient.status = "normal"
-            action_type = "entry"
-    else:
-        # Symmetrical Toggle for rooms/zones
-        if patient.room == door_code:
-            # Exiting Room -> Transition back to Corridor
-            patient.room = "CORR"
-            patient.location = "Corridor"
-            patient.status = "normal"
-            action_type = "exit"
-            buzzer_trigger = True  # Patient got out of their assigned/occupied room!
+    if assigned_room_code:
+        # Admitted patient is detected at any door -> immediately trigger buzzer
+        buzzer_trigger = True
 
-            alert_data = {
-                "type": "room_exit",
-                "severity": "warning",
-                "title": "Room Exit Alert",
-                "message": f"Patient {patient.name} has left their assigned room ({room.name if room else door_code}).",
-                "patient_id": patient.patient_id,
-                "room": door_code,
-                "metadata": {"rfid_uid": payload.rfid_uid}
-            }
-            alert = alert_engine.create_alert(db, alert_data)
-            if alert:
-                await ws_manager.broadcast({
-                    "event": "alert_created",
-                    "data": {
-                        "id": alert.alert_code,
-                        "type": alert.type,
-                        "title": alert.title,
-                        "message": alert.message,
-                        "timestamp": alert.created_at.isoformat(),
-                        "patientId": alert.patient_id,
-                    }
-                })
-        else:
-            # Entering Room
-            patient.room = door_code
-            patient.location = room.name if room else f"Room {door_code}"
-            action_type = "entry"
-
-            # Check zone restrictions and authorization
-            zone_code = "GENERAL"
-            if door_code == "REST":
-                zone_code = "RESTRICTED"
-            elif door_code == "ISO":
-                zone_code = "ISOLATION"
-
-            access_check = ZoneManagementService.check_zone_access_authorization(db, patient.patient_id, zone_code)
-            if not access_check["authorized"]:
+        if door_code == "ENTRY":
+            # Symmetrical Toggle for WARD exit/entry via ENTRY gate
+            if patient.location and patient.location != "Outside Ward":
+                # Exit Ward Area
+                patient.room = None
+                patient.location = "Outside Ward"
                 patient.status = "anomaly"
+                action_type = "exit"
+
+                alert_data = {
+                    "type": "unauthorized_exit",
+                    "severity": "critical",
+                    "title": "Unauthorized Exit Alert",
+                    "message": f"Patient {patient.name} (admitted to {assigned_room_rec.name}) has left the ward area.",
+                    "patient_id": patient.patient_id,
+                    "room": "Exit Door",
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+            else:
+                # Entering Ward Area -> Goes into Corridor
+                patient.room = "CORR"
+                patient.location = "Corridor"
+                patient.status = "warning"
+                action_type = "entry"
+
+                alert_data = {
+                    "type": "unauthorized_movement",
+                    "severity": "warning",
+                    "title": "Unauthorized Movement Alert",
+                    "message": f"Patient {patient.name} (admitted to {assigned_room_rec.name}) entered the ward area corridor.",
+                    "patient_id": patient.patient_id,
+                    "room": "Corridor",
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+        elif door_code == assigned_room_code:
+            # Detected at the door to their assigned room
+            if patient.room == assigned_room_code:
+                # Exiting Room
+                patient.room = "CORR"
+                patient.location = "Corridor"
+                patient.status = "warning"
+                action_type = "exit"
+                if assigned_room_rec:
+                    assigned_room_rec.status = "normal"
+
+                alert_data = {
+                    "type": "room_exit",
+                    "severity": "warning",
+                    "title": "Room Exit Alert",
+                    "message": f"Patient {patient.name} has left their assigned room ({assigned_room_rec.name}).",
+                    "patient_id": patient.patient_id,
+                    "room": door_code,
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+            else:
+                # Entering assigned room back
+                patient.room = assigned_room_code
+                patient.location = assigned_room_rec.name
+                patient.status = "normal"
+                action_type = "entry"
+                if assigned_room_rec:
+                    assigned_room_rec.status = "occupied"
+
+                alert_data = {
+                    "type": "room_entry",
+                    "severity": "info",
+                    "title": "Room Entry Alert",
+                    "message": f"Patient {patient.name} returned to their assigned room ({assigned_room_rec.name}).",
+                    "patient_id": patient.patient_id,
+                    "room": door_code,
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+        else:
+            # Detected at another door (not ENTRY, and not their assigned room door)
+            if patient.room == door_code:
+                # Exiting the other room
+                patient.room = "CORR"
+                patient.location = "Corridor"
+                patient.status = "warning"
+                action_type = "exit"
+                if room:
+                    room.status = "normal"
+
+                alert_data = {
+                    "type": "unauthorized_movement",
+                    "severity": "warning",
+                    "title": "Unauthorized Movement Alert",
+                    "message": f"Patient {patient.name} (admitted to {assigned_room_rec.name}) left room {room.name if room else door_code}.",
+                    "patient_id": patient.patient_id,
+                    "room": door_code,
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+            else:
+                # Entering the other room
+                patient.room = door_code
+                patient.location = room.name if room else f"Room {door_code}"
+                patient.status = "anomaly"
+                action_type = "entry"
+                if room:
+                    room.status = "occupied"
+
                 alert_data = {
                     "type": "unauthorized_access",
                     "severity": "high",
                     "title": "Unauthorized Access Alert",
-                    "message": f"Patient {patient.name} entered restricted zone: {room.name if room else door_code}.",
+                    "message": f"Patient {patient.name} (admitted to {assigned_room_rec.name}) entered room {room.name if room else door_code}.",
+                    "patient_id": patient.patient_id,
+                    "room": door_code,
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+
+        # Create alert and broadcast
+        alert = alert_engine.create_alert(db, alert_data)
+        if alert:
+            await ws_manager.broadcast({
+                "event": "alert_created",
+                "data": {
+                    "id": alert.alert_code,
+                    "type": alert.type,
+                    "title": alert.title,
+                    "message": alert.message,
+                    "timestamp": alert.created_at.isoformat(),
+                    "patientId": alert.patient_id,
+                }
+            })
+    else:
+        # Fallback to default logic (patient has no assigned room)
+        if door_code == "ENTRY":
+            # Symmetrical Toggle for WARD exit/entry via ENTRY gate
+            if patient.location and patient.location != "Outside Ward":
+                # Exit Ward Area
+                patient.room = None
+                patient.location = "Outside Ward"
+                patient.status = "anomaly"
+                action_type = "exit"
+                buzzer_trigger = True  # Always buzz on ward egress
+
+                alert_data = {
+                    "type": "unauthorized_exit",
+                    "severity": "critical",
+                    "title": "Unauthorized Exit Alert",
+                    "message": f"Patient {patient.name} has left the ward area.",
+                    "patient_id": patient.patient_id,
+                    "room": "Exit Door",
+                    "metadata": {"rfid_uid": payload.rfid_uid}
+                }
+                alert = alert_engine.create_alert(db, alert_data)
+                if alert:
+                    await ws_manager.broadcast({
+                        "event": "alert_created",
+                        "data": {
+                            "id": alert.alert_code,
+                            "type": alert.type,
+                            "title": alert.title,
+                            "message": alert.message,
+                            "timestamp": alert.created_at.isoformat(),
+                            "patientId": alert.patient_id,
+                        }
+                    })
+            else:
+                # Entering Ward Area -> Goes into Corridor
+                patient.room = "CORR"
+                patient.location = "Corridor"
+                patient.status = "normal"
+                action_type = "entry"
+        else:
+            # Symmetrical Toggle for rooms/zones
+            if patient.room == door_code:
+                # Exiting Room -> Transition back to Corridor
+                patient.room = "CORR"
+                patient.location = "Corridor"
+                patient.status = "normal"
+                action_type = "exit"
+                buzzer_trigger = True  # Patient got out of their assigned/occupied room!
+
+                alert_data = {
+                    "type": "room_exit",
+                    "severity": "warning",
+                    "title": "Room Exit Alert",
+                    "message": f"Patient {patient.name} has left their assigned room ({room.name if room else door_code}).",
                     "patient_id": patient.patient_id,
                     "room": door_code,
                     "metadata": {"rfid_uid": payload.rfid_uid}
@@ -1291,7 +1401,45 @@ async def ingest_door_event(
                         }
                     })
             else:
-                patient.status = "normal"
+                # Entering Room
+                patient.room = door_code
+                patient.location = room.name if room else f"Room {door_code}"
+                action_type = "entry"
+
+                # Check zone restrictions and authorization
+                zone_code = "GENERAL"
+                if door_code == "REST":
+                    zone_code = "RESTRICTED"
+                elif door_code == "ISO":
+                    zone_code = "ISOLATION"
+
+                access_check = ZoneManagementService.check_zone_access_authorization(db, patient.patient_id, zone_code)
+                if not access_check["authorized"]:
+                    patient.status = "anomaly"
+                    alert_data = {
+                        "type": "unauthorized_access",
+                        "severity": "high",
+                        "title": "Unauthorized Access Alert",
+                        "message": f"Patient {patient.name} entered restricted zone: {room.name if room else door_code}.",
+                        "patient_id": patient.patient_id,
+                        "room": door_code,
+                        "metadata": {"rfid_uid": payload.rfid_uid}
+                    }
+                    alert = alert_engine.create_alert(db, alert_data)
+                    if alert:
+                        await ws_manager.broadcast({
+                            "event": "alert_created",
+                            "data": {
+                                "id": alert.alert_code,
+                                "type": alert.type,
+                                "title": alert.title,
+                                "message": alert.message,
+                                "timestamp": alert.created_at.isoformat(),
+                                "patientId": alert.patient_id,
+                            }
+                        })
+                else:
+                    patient.status = "normal"
 
     # Log access history
     log = models.AccessLog(
@@ -1423,55 +1571,98 @@ async def assign_patient(
 ) -> Dict[str, Any]:
     """
     Endpoint for wristbands to register/assign a patient.
-    If the tag (ble_minor) was previously assigned, move the old patient to history.
+    If the tag (ble_minor) or RFID was previously assigned, move the old patient(s) to history.
     """
     now = datetime.utcnow()
-    
-    # Check if this tag was already assigned to someone else
-    old_patient = db.query(models.Patient).filter(
-        (models.Patient.ble_minor == payload.ble_minor) | 
-        (models.Patient.rfid_uid == payload.rfid_uid)
-    ).first()
     
     # Resolve Room Info
     room_code = payload.ward
     room = db.query(models.Room).filter(models.Room.room_code == room_code).first()
     room_name = room.name if room else f"Room {room_code}" if room_code else "Unassigned Room"
 
-    if old_patient:
-        # Move current state to history
+    # Find any other patient who is currently assigned to this tag or RFID
+    conflicting_patients = db.query(models.Patient).filter(
+        (models.Patient.patient_id != payload.patient_id) & (
+            (models.Patient.ble_minor == payload.ble_minor) | 
+            (models.Patient.rfid_uid == payload.rfid_uid)
+        )
+    ).all()
+
+    for p in conflicting_patients:
+        # Move conflicting patient's assignment to history
         history = models.PatientAssignmentHistory(
-            patient_id=old_patient.patient_id,
-            name=old_patient.name,
-            ward=old_patient.room,
-            ble_minor=old_patient.ble_minor,
-            rfid_uid=old_patient.rfid_uid,
-            assigned_at=old_patient.last_activity or now, 
+            patient_id=p.patient_id,
+            name=p.name,
+            ward=p.room,
+            ble_minor=p.ble_minor,
+            rfid_uid=p.rfid_uid,
+            assigned_at=p.last_activity or now, 
         )
         db.add(history)
         
-        # Update existing record
-        old_patient.patient_id = payload.patient_id
-        old_patient.name = payload.name
-        old_patient.room = room_code
-        old_patient.location = room_name
-        old_patient.ble_minor = payload.ble_minor
-        old_patient.rfid_uid = payload.rfid_uid
-        old_patient.last_activity = now
+        # Deassign conflicting patient
+        p.ble_minor = None
+        p.rfid_uid = None
+        p.room = None
+        p.location = None
+        p.status = "normal"
+        
+        # Unlink conflicting patient from any Room
+        db.query(models.Room).filter(models.Room.patient_id == p.patient_id).update(
+            {models.Room.patient_id: None, models.Room.status: "normal"}
+        )
+
+    # Flush changes to database to clear unique constraints (set to NULL) before assigning to target patient
+    db.flush()
+
+    # Check if the target patient already exists
+    patient = db.query(models.Patient).filter(models.Patient.patient_id == payload.patient_id).first()
+
+    if patient:
+        # Move target patient's old assignment to history (if it was active/different)
+        if patient.ble_minor or patient.rfid_uid or patient.room:
+            history = models.PatientAssignmentHistory(
+                patient_id=patient.patient_id,
+                name=patient.name,
+                ward=patient.room,
+                ble_minor=patient.ble_minor,
+                rfid_uid=patient.rfid_uid,
+                assigned_at=patient.last_activity or now, 
+            )
+            db.add(history)
+
+        # Update target patient
+        patient.name = payload.name
+        patient.room = room_code
+        patient.location = room_name
+        patient.ble_minor = payload.ble_minor
+        patient.rfid_uid = payload.rfid_uid
+        patient.last_activity = now
+        patient.status = "occupied" if room_code else "normal"
     else:
         # Create new patient record
-        new_patient = models.Patient(
+        patient = models.Patient(
             patient_id=payload.patient_id,
             name=payload.name,
             room=room_code,
             location=room_name,
             ble_minor=payload.ble_minor,
             rfid_uid=payload.rfid_uid,
-            status="normal",
+            status="occupied" if room_code else "normal",
             last_activity=now
         )
-        db.add(new_patient)
-    
+        db.add(patient)
+
+    # Unlink target patient from any other Room they might have been in
+    db.query(models.Room).filter(models.Room.patient_id == payload.patient_id).update(
+        {models.Room.patient_id: None, models.Room.status: "normal"}
+    )
+
+    # Link target patient to the new Room
+    if room:
+        room.patient_id = payload.patient_id
+        room.status = "occupied"
+
     db.commit()
     
     # Broadcast update to dashboard
@@ -1520,19 +1711,6 @@ async def deassign_patient(
     db.commit()
     
     return {"success": True, "message": f"Patient {patient_id} deleted successfully"}
-
-
-@app.get("/api/v1/patients/active-assignments")
-def list_active_assignments(db: Session = Depends(get_db)):
-    """List all active patient assignments with rfid_uid and assigned room."""
-    patients = db.query(models.Patient).filter(models.Patient.rfid_uid != None).all()
-    return [
-        {
-            "rfid_uid": p.rfid_uid,
-            "room": p.room or ""
-        }
-        for p in patients
-    ]
 
 
 
