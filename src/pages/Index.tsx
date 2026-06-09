@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Activity, Shield, Users, Clock, User, ChevronDown, FileText } from "lucide-react";
+import { Activity, Shield, Users, Clock, User, ChevronDown, FileText, History } from "lucide-react";
 import HospitalFloorPlan from "@/components/dashboard/hospital-floor-plan";
 import PatientPanel from "@/components/dashboard/patient-panel";
 import NotificationPanel from "@/components/dashboard/notification-panel";
@@ -61,15 +61,26 @@ const Index = () => {
               </Badge>
               
               <RoleGuard allowedRoles={['admin', 'doctor']}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/reports')}
-                  className="flex items-center gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  Reports
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/reports')}
+                    className="flex items-center gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Reports
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/audit-logs')}
+                    className="flex items-center gap-2"
+                  >
+                    <History className="h-4 w-4" />
+                    Audit Logs
+                  </Button>
+                </div>
               </RoleGuard>
               
               <Popover open={showUserProfile} onOpenChange={setShowUserProfile}>

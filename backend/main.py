@@ -2878,3 +2878,162 @@ def export_combined_report(
             "Content-Disposition": "attachment; filename=halo-watch-report.csv"
         },
     )
+
+
+@app.get("/api/v1/audit/door-events", response_model=List[schemas.AuditDoorEventOut])
+def get_audit_door_events(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_any_role)
+) -> List[schemas.AuditDoorEventOut]:
+    """Get door events with optional date range and search filtering."""
+    query = db.query(models.DoorEvent).outerjoin(models.Patient, models.DoorEvent.patient_id == models.Patient.patient_id)
+    
+    # Defaults to past 3 months
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format")
+    else:
+        start_dt = datetime.utcnow() - timedelta(days=90)
+        
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format")
+    else:
+        end_dt = datetime.utcnow()
+
+    query = query.filter(models.DoorEvent.timestamp >= start_dt, models.DoorEvent.timestamp <= end_dt)
+
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            models.DoorEvent.door_name.like(search_filter) |
+            models.DoorEvent.rfid_uid.like(search_filter) |
+            models.Patient.name.like(search_filter) |
+            models.DoorEvent.patient_id.like(search_filter)
+        )
+
+    events = query.order_by(models.DoorEvent.timestamp.desc()).all()
+    
+    result = []
+    for e in events:
+        result.append(
+            schemas.AuditDoorEventOut(
+                id=e.id,
+                node_id=e.node_id,
+                reader_id=e.reader_id,
+                door_name=e.door_name,
+                rfid_uid=e.rfid_uid,
+                patient_id=e.patient_id,
+                patient_name=e.patient.name if e.patient else "Unknown Patient",
+                action=e.action,
+                timestamp=e.timestamp
+            )
+        )
+    return result
+
+
+@app.get("/api/v1/audit/admissions", response_model=List[schemas.AuditAdmissionOut])
+def get_audit_admissions(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_any_role)
+) -> List[schemas.AuditAdmissionOut]:
+    """Get active and historical patient assignments/admissions with filtering."""
+    # Defaults to past 3 months
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format")
+    else:
+        start_dt = datetime.utcnow() - timedelta(days=90)
+        
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format")
+    else:
+        end_dt = datetime.utcnow()
+
+    # Query 1: Historical assignments
+    hist_query = db.query(models.PatientAssignmentHistory).filter(
+        models.PatientAssignmentHistory.assigned_at >= start_dt,
+        models.PatientAssignmentHistory.assigned_at <= end_dt
+    )
+
+    if search:
+        search_filter = f"%{search}%"
+        hist_query = hist_query.filter(
+            models.PatientAssignmentHistory.name.like(search_filter) |
+            models.PatientAssignmentHistory.patient_id.like(search_filter) |
+            models.PatientAssignmentHistory.ward.like(search_filter) |
+            models.PatientAssignmentHistory.rfid_uid.like(search_filter)
+        )
+
+    hist_records = hist_query.order_by(models.PatientAssignmentHistory.assigned_at.desc()).all()
+
+    # Query 2: Active assignments (from Patients table where tag/room is assigned)
+    active_query = db.query(models.Patient).filter(
+        (models.Patient.rfid_uid.isnot(None)) | (models.Patient.ble_minor.isnot(None))
+    )
+    active_query = active_query.filter(
+        models.Patient.last_activity >= start_dt,
+        models.Patient.last_activity <= end_dt
+    )
+
+    if search:
+        search_filter = f"%{search}%"
+        active_query = active_query.filter(
+            models.Patient.name.like(search_filter) |
+            models.Patient.patient_id.like(search_filter) |
+            models.Patient.room.like(search_filter) |
+            models.Patient.rfid_uid.like(search_filter)
+        )
+
+    active_records = active_query.order_by(models.Patient.last_activity.desc()).all()
+
+    result = []
+    
+    # Add active records first
+    for p in active_records:
+        result.append(
+            schemas.AuditAdmissionOut(
+                id=None,
+                patient_id=p.patient_id,
+                name=p.name,
+                ward=p.room,
+                ble_minor=p.ble_minor,
+                rfid_uid=p.rfid_uid,
+                assigned_at=p.last_activity,
+                unassigned_at=None
+            )
+        )
+
+    # Add historical records
+    for h in hist_records:
+        result.append(
+            schemas.AuditAdmissionOut(
+                id=h.id,
+                patient_id=h.patient_id,
+                name=h.name,
+                ward=h.ward,
+                ble_minor=h.ble_minor,
+                rfid_uid=h.rfid_uid,
+                assigned_at=h.assigned_at,
+                unassigned_at=h.unassigned_at
+            )
+        )
+
+    # Sort combined result by assigned_at descending
+    result.sort(key=lambda x: x.assigned_at, reverse=True)
+    return result

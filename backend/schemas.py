@@ -465,3 +465,33 @@ class CalibrationOut(BaseModel):
         from_attributes = True
 
 
+class AuditDoorEventOut(BaseModel):
+    id: int
+    node_id: str
+    reader_id: str
+    door_name: Optional[str] = None
+    rfid_uid: str
+    patient_id: Optional[str] = None
+    patient_name: Optional[str] = None
+    action: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditAdmissionOut(BaseModel):
+    id: Optional[int] = None
+    patient_id: str
+    name: str
+    ward: Optional[str] = None
+    ble_minor: Optional[int] = None
+    rfid_uid: Optional[str] = None
+    assigned_at: datetime
+    unassigned_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+
